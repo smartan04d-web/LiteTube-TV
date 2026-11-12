@@ -51,18 +51,23 @@ public final class MainActivity extends Activity {
         @Override public void run() {
             if (!active || web == null) return;
             if (autoSkipEnabled) web.evaluateJavascript(SKIP_SCRIPT, null);
-            handler.postDelayed(this, 1000);
+            handler.postDelayed(this, 1500);
         }
     };
-    // Only click a visible, enabled Skip Ad control. Never advance normal video playback.
+    // Only click an enabled and visible Skip Ad button during an actual ad.
+    // The script runs in the top document only; cross-origin frames are inaccessible.
     private static final String SKIP_SCRIPT =
         "(function(){try{" +
+        "var ad=document.querySelector('.ad-showing,.ytp-ad-player-overlay,.ytp-ad-preview-container');" +
+        "if(!ad)return;" +
         "var selectors=['.ytp-ad-skip-button','.ytp-ad-skip-button-modern'," +
-        "'.ytp-skip-ad-button','button[aria-label*=\\\"Skip\\\"]'];" +
+        "'.ytp-skip-ad-button','.ytp-ad-skip-button-container button'," +
+        "'button[aria-label=\\\"Skip Ad\\\"]','button[aria-label=\\\"Skip ads\\\"]'];" +
         "var buttons=document.querySelectorAll(selectors.join(','));" +
         "for(var i=0;i<buttons.length;i++){var b=buttons[i];" +
-        "var r=b.getBoundingClientRect();var style=getComputedStyle(b);" +
-        "if(!b.disabled&&r.width>0&&r.height>0&&style.visibility!=='hidden'&&style.display!=='none'){" +
+        "var r=b.getBoundingClientRect(),st=getComputedStyle(b);" +
+        "var disabled=b.disabled||b.getAttribute('aria-disabled')==='true';" +
+        "if(!disabled&&r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none'){" +
         "b.click();break;}}}catch(e){}})();";
     private static final String[] FILTERED_HOSTS = {
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
@@ -126,7 +131,7 @@ public final class MainActivity extends Activity {
         toolbar.addView(find);
         toolbar.addView(browser);
         SharedPreferences prefs = getSharedPreferences("litetube_tv", MODE_PRIVATE);
-        filterEnabled = prefs.getBoolean("filter", true);
+        filterEnabled = prefs.getBoolean("filter", false);
         autoSkipEnabled = prefs.getBoolean("auto_skip", true);
         filterButton = button("");
         refreshFilterLabel();
@@ -142,6 +147,7 @@ public final class MainActivity extends Activity {
             autoSkipEnabled = !autoSkipEnabled;
             prefs.edit().putBoolean("auto_skip", autoSkipEnabled).apply();
             refreshSkipLabel();
+            if (autoSkipEnabled && active && web != null) web.evaluateJavascript(SKIP_SCRIPT, null);
         });
         toolbar.addView(filterButton);
         toolbar.addView(skipButton);
@@ -268,7 +274,7 @@ public final class MainActivity extends Activity {
         if (web != null) web.onResume();
         active = true;
         handler.removeCallbacks(skipCheck);
-        handler.postDelayed(skipCheck, 1000);
+        handler.postDelayed(skipCheck, 1500);
     }
     @Override protected void onSaveInstanceState(Bundle b) { if (web != null) web.saveState(b); super.onSaveInstanceState(b); }
     @Override protected void onDestroy() {
