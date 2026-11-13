@@ -1,8 +1,6 @@
 package com.litetube.tv;
 
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
-import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.net.Uri;
@@ -181,11 +179,31 @@ public final class MainActivity extends Activity {
                 if (!request.isForMainFrame()) return false;
                 Uri uri = request.getUrl();
                 String scheme = uri.getScheme(), host = uri.getHost();
-                if ("https".equalsIgnoreCase(scheme) && isYoutube(host)) return false;
+                // Keep normal web navigation inside the TV app. Never hand it to Chrome.
                 if ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
-                    catch (ActivityNotFoundException ex) { toast("No browser installed"); }
+                    return false;
                 }
+                // Handle YouTube intent links using the embedded website instead.
+                if ("intent".equalsIgnoreCase(scheme)) {
+                    String fallback = uri.getQueryParameter("S.browser_fallback_url");
+                    // intent URI fallbacks are usually in the fragment, not query.
+                    String raw = uri.toString();
+                    int marker = raw.indexOf("S.browser_fallback_url=");
+                    if (marker >= 0) {
+                        String encoded = raw.substring(marker + "S.browser_fallback_url=".length());
+                        int end = encoded.indexOf(';');
+                        if (end >= 0) encoded = encoded.substring(0, end);
+                        fallback = Uri.decode(encoded);
+                    }
+                    if (fallback != null) {
+                        Uri target = Uri.parse(fallback);
+                        if ("https".equalsIgnoreCase(target.getScheme()) && isYoutube(target.getHost())) {
+                            view.loadUrl(fallback);
+                        }
+                    }
+                    return true;
+                }
+                // Ignore external app schemes rather than opening another app.
                 return true;
             }
         });
